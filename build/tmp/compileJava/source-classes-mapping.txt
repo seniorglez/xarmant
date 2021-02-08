@@ -1,2 +1,0 @@
-xarmanta/application/Launcher.java
- xarmanta.application.Launcher
