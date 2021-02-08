@@ -6,7 +6,9 @@ import javafx.beans.property.SimpleBooleanProperty
 import javafx.beans.value.ChangeListener
 import javafx.beans.value.ObservableBooleanValue
 import javafx.beans.value.ObservableObjectValue
+import javafx.concurrent.WorkerStateEvent
 import javafx.event.ActionEvent
+import javafx.event.EventHandler
 import javafx.fxml.FXML
 import javafx.scene.layout.StackPane
 import javafx.scene.text.TextFlow
@@ -24,6 +26,7 @@ import javafx.stage.DirectoryChooser
 import javafx.util.Callback
 import org.eclipse.jgit.errors.RepositoryNotFoundException
 import xarmanta.mainwindow.application.Clone
+import xarmanta.mainwindow.infraestructure.services.OpenRepoService
 import xarmanta.mainwindow.model.Commit
 import xarmanta.mainwindow.shared.GitContext
 import xarmanta.mainwindow.shared.XGit
@@ -63,17 +66,23 @@ class MainWindowController {
     }
 
     fun openRepository(actionEvent: ActionEvent?) {
-        var dir: File? = null
-        try {
-            dir = chooseDirectory("Choose root of your local git repository")
-            context = GitContext(null, dir)
-            git = XGit(context!!, monitor).open()
-            isAnyRepoOpen.set(true)
-            loadGraph()
-        } catch (e: RepositoryNotFoundException) {
-            Alert(AlertType.ERROR, "$dir does not contain a valid git repository").showAndWait()
-            openRepository(actionEvent)
+        val dir = chooseDirectory("Choose root of your local git repository")
+        val orservice = OpenRepoService.Builder().dir(dir!!).monitor(monitor).build()
+        orservice.setOnFailed {
+            EventHandler<WorkerStateEvent> {
+                print("Given dir does not contain a valid git repository")
+                Alert(AlertType.ERROR, "$dir does not contain a valid git repository").showAndWait()
+                openRepository(actionEvent)
+            }
         }
+        orservice.setOnSucceeded {
+            EventHandler<WorkerStateEvent> {
+                print("OpenRepo")
+                isAnyRepoOpen.set(true)
+                loadGraph()
+            }
+        }
+        orservice.start()
     }
 
     fun cloneRepository(actionEvent: ActionEvent?) {
@@ -97,7 +106,7 @@ class MainWindowController {
         runLongOperation { git?.pull() }
     }
 
-    fun loadGraph() {
+    fun loadGraph() {//Esto kk, para eso tienes cosas observables
         runLongOperation {
             val commits = git?.reverseWalk()
             Platform.runLater{
